@@ -252,15 +252,15 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads highest quality audio using yt-dlp with iOS/Android player clients to bypass Cloud IP bot checks."""
-    clients = [
-        ['ios', 'mweb'],
-        ['android', 'ios'],
-        ['web', 'mweb']
+    """Downloads highest quality audio using yt-dlp with android_vr/web_creator clients to bypass cloud IP bot challenges."""
+    clients_list = [
+        ['android_vr', 'web_creator', 'ios', 'mweb'],
+        ['android_creator', 'android', 'ios'],
+        ['mweb', 'web']
     ]
     
     last_error = None
-    for player_clients in clients:
+    for player_clients in clients_list:
         try:
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -293,7 +293,7 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             print(f"yt-dlp attempt with {player_clients} failed: {e}")
             last_error = e
 
-    # SoundCloud Fallback if YouTube blocks Cloud Datacenter IP
+    # SoundCloud Fallback if YouTube blocks
     try:
         ydl_opts = {
             'format': 'bestaudio/best',
