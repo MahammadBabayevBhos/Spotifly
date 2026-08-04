@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: spotifly-downloader
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
