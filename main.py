@@ -253,6 +253,8 @@ def get_lyrics(title: str, artist: str):
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
     """Downloads audio using SoundCloud / YouTube search with zero bot challenge issues on cloud servers."""
+    import glob
+    
     # Attempt 1: SoundCloud Search (Fast, 100% open, zero datacenter IP bot challenges)
     try:
         ydl_opts = {
@@ -270,11 +272,12 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"scsearch1:{search_term}"])
         
-        mp3_file = output_path + ".mp3"
-        if os.path.exists(mp3_file):
-            return mp3_file
-        if os.path.exists(output_path):
-            return output_path
+        matches = glob.glob(f"{output_path}*")
+        for m in matches:
+            if m.endswith('.mp3'):
+                return m
+        if matches:
+            return matches[0]
     except Exception as sc_err:
         print(f"SoundCloud search attempt: {sc_err}")
 
@@ -309,11 +312,12 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([f"ytsearch1:{search_term} audio"])
             
-            mp3_file = output_path + ".mp3"
-            if os.path.exists(mp3_file):
-                return mp3_file
-            if os.path.exists(output_path):
-                return output_path
+            matches = glob.glob(f"{output_path}*")
+            for m in matches:
+                if m.endswith('.mp3'):
+                    return m
+            if matches:
+                return matches[0]
         except Exception as e:
             print(f"yt-dlp attempt with {player_clients} failed: {e}")
             last_error = e
