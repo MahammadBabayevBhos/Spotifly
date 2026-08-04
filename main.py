@@ -252,29 +252,75 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads highest quality audio using yt-dlp and converts to 320kbps MP3 via FFmpeg."""
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_path,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '320',
-        }],
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True,
-    }
+    """Downloads highest quality audio using yt-dlp with iOS/Android player clients to bypass Cloud IP bot checks."""
+    clients = [
+        ['ios', 'mweb'],
+        ['android', 'ios'],
+        ['web', 'mweb']
+    ]
     
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([f"ytsearch1:{search_term} audio"])
-    
-    mp3_file = output_path + ".mp3"
-    if not os.path.exists(mp3_file):
-        # yt-dlp might output directly without extra .mp3 extension if outtmpl contained %
+    last_error = None
+    for player_clients in clients:
+        try:
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': output_path + '.%(ext)s',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '320',
+                }],
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': player_clients,
+                        'skip': ['webpage']
+                    }
+                },
+                'quiet': True,
+                'no_warnings': True,
+                'nocheckcertificate': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([f"ytsearch1:{search_term} audio"])
+            
+            mp3_file = output_path + ".mp3"
+            if os.path.exists(mp3_file):
+                return mp3_file
+            if os.path.exists(output_path):
+                return output_path
+        except Exception as e:
+            print(f"yt-dlp attempt with {player_clients} failed: {e}")
+            last_error = e
+
+    # SoundCloud Fallback if YouTube blocks Cloud Datacenter IP
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path + '.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"scsearch1:{search_term}"])
+        
+        mp3_file = output_path + ".mp3"
+        if os.path.exists(mp3_file):
+            return mp3_file
         if os.path.exists(output_path):
-            mp3_file = output_path
-    return mp3_file
+            return output_path
+    except Exception as sc_err:
+        print(f"SoundCloud fallback error: {sc_err}")
+
+    if last_error:
+        raise last_error
+    raise Exception("Audio axınını endirmək mümkün olmadı.")
 
 def embed_metadata(mp3_path: str, title: str, artist: str, album: str, cover_url: Optional[str]):
     """Embeds ID3 Title, Artist, Album, and Cover Art into MP3 file using Mutagen."""
