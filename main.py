@@ -252,11 +252,36 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads highest quality audio using yt-dlp with android_vr/web_creator clients to bypass cloud IP bot challenges."""
+    """Downloads audio using SoundCloud / YouTube search with zero bot challenge issues on cloud servers."""
+    # Attempt 1: SoundCloud Search (Fast, 100% open, zero datacenter IP bot challenges)
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path + '.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"scsearch1:{search_term}"])
+        
+        mp3_file = output_path + ".mp3"
+        if os.path.exists(mp3_file):
+            return mp3_file
+        if os.path.exists(output_path):
+            return output_path
+    except Exception as sc_err:
+        print(f"SoundCloud search attempt: {sc_err}")
+
+    # Attempt 2: YouTube Search with android_vr / web_creator clients
     clients_list = [
-        ['android_vr', 'web_creator', 'ios', 'mweb'],
-        ['android_creator', 'android', 'ios'],
-        ['mweb', 'web']
+        ['android_vr', 'web_creator', 'ios'],
+        ['android', 'mweb']
     ]
     
     last_error = None
@@ -292,31 +317,6 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
         except Exception as e:
             print(f"yt-dlp attempt with {player_clients} failed: {e}")
             last_error = e
-
-    # SoundCloud Fallback if YouTube blocks
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path + '.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
-            }],
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"scsearch1:{search_term}"])
-        
-        mp3_file = output_path + ".mp3"
-        if os.path.exists(mp3_file):
-            return mp3_file
-        if os.path.exists(output_path):
-            return output_path
-    except Exception as sc_err:
-        print(f"SoundCloud fallback error: {sc_err}")
 
     if last_error:
         raise last_error
