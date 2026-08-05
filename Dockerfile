@@ -3,6 +3,7 @@ FROM python:3.11-slim
 # Install ffmpeg and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    unzip \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
