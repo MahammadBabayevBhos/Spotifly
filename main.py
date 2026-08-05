@@ -31,6 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+def add_no_cache_headers(request: Request, call_next):
+    response = call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DOWNLOADS_DIR = BASE_DIR / "downloads"
