@@ -3,9 +3,12 @@ FROM python:3.11-slim
 # Install ffmpeg and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    nodejs \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp recommends Deno for YouTube's current EJS challenge solver.
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV PATH="/root/.deno/bin:${PATH}"
 
 WORKDIR /app
 

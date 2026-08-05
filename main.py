@@ -298,8 +298,7 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             # Let yt-dlp choose the currently supported YouTube clients. Hard-
             # coding web_creator/mweb can trigger PO-token failures on Render.
             # Current yt-dlp YouTube extraction requires EJS and a JS runtime.
-            'js_runtimes': {'node': {'path': None}},
-            'remote_components': ['ejs:github'],
+            'js_runtimes': {'deno': {'path': None}},
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
