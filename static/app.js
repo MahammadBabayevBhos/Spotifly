@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(err => console.log('SW registration failed', err));
+    navigator.serviceWorker.register('/static/sw.js?v=1.0.8').catch(err => console.log('SW registration failed', err));
   }
 
   // Fetch initial quota
