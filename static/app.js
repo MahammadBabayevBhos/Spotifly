@@ -95,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check iOS Safari to show PWA banner
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  // iPadOS may identify itself as macOS while still behaving like iOS Safari.
+  const isIOSDevice = isIOS || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
   if (isIOS && !isStandalone) {
     pwaBanner.style.display = 'flex';
@@ -557,11 +559,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.style.display = 'none';
       a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
+
+      if (isIOSDevice) {
+        // iOS Safari does not reliably honor download= for blob URLs. Keep a
+        // visible user-initiated link so Safari can open the MP3 and the user
+        // can choose Share -> Save to Files.
+        a.className = 'btn-primary ios-save-link';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'MP3-ni aç / Files-a saxla';
+        a.style.display = 'flex';
+        a.style.alignItems = 'center';
+        a.style.justifyContent = 'center';
+        a.style.textDecoration = 'none';
+        document.querySelector('.download-action')?.appendChild(a);
+      } else {
+        a.style.display = 'none';
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+      }
 
       // Offline storage is optional and must never block the real MP3 download.
       try {
@@ -573,9 +591,14 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
         a.remove();
-      }, 1000);
+      }, isIOSDevice ? 5 * 60 * 1000 : 1000);
 
-      showToast('Mahnı oflayn kitabxanaya əlavə olundu və MP3 yükləndi! 🎶', 'success');
+      showToast(
+        isIOSDevice
+          ? 'MP3 hazırdır. Açılan düyməyə basın, sonra Paylaş -> Save to Files seçin.'
+          : 'Mahnı oflayn kitabxanaya əlavə olundu və MP3 yükləndi! 🎶',
+        'success'
+      );
 
     } catch (err) {
       clearInterval(interval);
