@@ -443,13 +443,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  audioElement.addEventListener('ended', () => {
-    updatePlayPauseState(false);
-  });
+  // Lyrics Toggle Handler
+  const handleLyricsClick = async (e) => {
+    if (e) e.preventDefault();
+    let track = currentResolvedTrack;
+    if (!track) {
+      const title = trackTitle.textContent.trim();
+      const artist = trackArtist.textContent.trim();
+      if (title && artist && title !== 'Track Title') {
+        track = { title, artist };
+      }
+    }
+
+    if (!track) {
+      showToast('İlk öncə mahnını tapın!', 'error');
+      return;
+    }
+
+    if (lyricsContainer.style.display === 'block') {
+      lyricsContainer.style.display = 'none';
+      return;
+    }
+
+    lyricsContainer.style.display = 'block';
+    lyricsText.textContent = 'Mahnı sözləri axtarılır... 🔍';
+
+    try {
+      const res = await fetch(`/api/lyrics?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.lyrics) {
+          lyricsText.textContent = data.lyrics;
+        } else {
+          lyricsText.textContent = 'Açıq bazada bu mahnının sözləri tapılmadı.';
+        }
+      }
+    } catch (err) {
+      lyricsText.textContent = 'Sözləri yükləmək mümkün olmadı.';
+    }
+  };
+
+  lyricsToggleBtn.addEventListener('click', handleLyricsClick);
 
   // Updated Download Handler (Saves to IndexedDB for offline play + triggers MP3 download)
-  downloadBtn.addEventListener('click', async () => {
-    if (!currentResolvedTrack) return;
+  const handleDownloadClick = async (e) => {
+    if (e) e.preventDefault();
+
+    let trackToDownload = currentResolvedTrack;
+    if (!trackToDownload) {
+      const title = trackTitle.textContent.trim();
+      const artist = trackArtist.textContent.trim();
+      if (title && artist && title !== 'Track Title') {
+        trackToDownload = {
+          title: title,
+          artist: artist,
+          album: trackAlbum.textContent.trim() || 'Single',
+          cover_url: trackCover.src
+        };
+      }
+    }
+
+    if (!trackToDownload) {
+      showToast('Zəhmət olmasa ilk öncə mahnını tapın!', 'error');
+      return;
+    }
 
     downloadBtn.disabled = true;
     progressContainer.style.display = 'block';
@@ -471,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentResolvedTrack)
+        body: JSON.stringify(trackToDownload)
       });
 
       clearInterval(interval);
@@ -486,11 +543,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const blob = await res.blob();
 
       // Save to App's internal IndexedDB for Offline playback inside Web App!
-      await saveTrackOffline(currentResolvedTrack, blob);
+      await saveTrackOffline(trackToDownload, blob);
 
       // Trigger standard MP3 download for Files/Downloads
       const disposition = res.headers.get('Content-Disposition');
-      let filename = `${currentResolvedTrack.artist} - ${currentResolvedTrack.title}.mp3`;
+      let filename = `${trackToDownload.artist} - ${trackToDownload.title}.mp3`;
       if (disposition && disposition.includes('filename=')) {
         const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
         if (matches != null && matches[1]) {
@@ -520,6 +577,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       downloadBtn.disabled = false;
     }
+  };
+
+  downloadBtn.addEventListener('click', handleDownloadClick);
+
+  audioElement.addEventListener('ended', () => {
+    updatePlayPauseState(false);
   });
 
   function updateProgress(percent, text) {
