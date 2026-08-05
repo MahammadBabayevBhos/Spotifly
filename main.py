@@ -260,49 +260,68 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads audio using YouTube / SoundCloud search with zero bot challenge issues on cloud servers."""
+    """Downloads audio using YouTube android_vr/web_creator clients with SoundCloud fallback."""
     import glob
     
-    search_queries = [
-        f"ytsearch1:{search_term}",
-        f"ytsearch1:{search_term} audio",
-        f"scsearch1:{search_term}"
-    ]
-    
-    last_error = None
-    for query in search_queries:
-        try:
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': output_path + '.%(ext)s',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '320',
-                }],
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                },
-                'quiet': True,
-                'no_warnings': True,
-                'nocheckcertificate': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([query])
-            
-            matches = glob.glob(f"{output_path}*")
-            for m in matches:
-                if m.endswith('.mp3'):
-                    return m
-            if matches:
-                return matches[0]
-        except Exception as e:
-            print(f"yt-dlp attempt '{query}' failed: {e}")
-            last_error = e
+    # Strategy 1: YouTube Search with android_vr & web_creator clients (Bypasses 403 and bot check on cloud servers)
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path + '.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android_vr', 'web_creator'],
+                    'skip': ['webpage']
+                }
+            },
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"ytsearch1:{search_term}"])
+        
+        matches = glob.glob(f"{output_path}*")
+        for m in matches:
+            if m.endswith('.mp3'):
+                return m
+        if matches:
+            return matches[0]
+    except Exception as yt_err:
+        print(f"YouTube android_vr attempt failed: {yt_err}")
 
-    if last_error:
-        raise last_error
-    raise Exception("Audio axınını endirmək mümkün olmadı.")
+    # Strategy 2: SoundCloud Search fallback
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path + '.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"scsearch1:{search_term}"])
+        
+        matches = glob.glob(f"{output_path}*")
+        for m in matches:
+            if m.endswith('.mp3'):
+                return m
+        if matches:
+            return matches[0]
+    except Exception as sc_err:
+        print(f"SoundCloud fallback failed: {sc_err}")
+
+    raise Exception("Audio axınını endirmək mümkün olmadı. Zəhmət olmasa bir az sonra yenidən cəhd edin.")
 
 def embed_metadata(mp3_path: str, title: str, artist: str, album: str, cover_url: Optional[str]):
     """Embeds ID3 Title, Artist, Album, and Cover Art into MP3 file using Mutagen."""
