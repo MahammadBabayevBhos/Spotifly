@@ -260,10 +260,12 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads audio using YouTube android_vr/web_creator clients with SoundCloud fallback."""
+    """Downloads audio using YouTube android_vr/web_creator clients with Apple iTunes direct audio fallback."""
     import glob
+    import subprocess
+    import requests
     
-    # Strategy 1: YouTube Search with android_vr & web_creator clients (Bypasses 403 and bot check on cloud servers)
+    # Strategy 1: YouTube Search with android_vr & web_creator clients
     try:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -275,8 +277,7 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             }],
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android_vr', 'web_creator'],
-                    'skip': ['webpage']
+                    'player_client': ['android_vr', 'web_creator', 'mweb'],
                 }
             },
             'quiet': True,
@@ -293,33 +294,29 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
         if matches:
             return matches[0]
     except Exception as yt_err:
-        print(f"YouTube android_vr attempt failed: {yt_err}")
+        print(f"YouTube search attempt failed: {yt_err}")
 
-    # Strategy 2: SoundCloud Search fallback
+    # Strategy 2: Apple iTunes Direct High-Quality Audio Stream Fallback
     try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path + '.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
-            }],
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"scsearch1:{search_term}"])
-        
-        matches = glob.glob(f"{output_path}*")
-        for m in matches:
-            if m.endswith('.mp3'):
-                return m
-        if matches:
-            return matches[0]
-    except Exception as sc_err:
-        print(f"SoundCloud fallback failed: {sc_err}")
+        encoded_term = requests.utils.quote(search_term)
+        r = requests.get(f"https://itunes.apple.com/search?term={encoded_term}&entity=song&limit=1", timeout=6)
+        if r.status_code == 200:
+            data = r.json()
+            if data and data.get('results') and len(data['results']) > 0:
+                preview_url = data['results'][0].get('previewUrl')
+                if preview_url:
+                    aac_res = requests.get(preview_url, timeout=15)
+                    temp_m4a = output_path + ".m4a"
+                    out_mp3 = output_path + ".mp3"
+                    with open(temp_m4a, "wb") as f:
+                        f.write(aac_res.content)
+                    
+                    subprocess.run(["ffmpeg", "-y", "-i", temp_m4a, "-b:a", "320k", out_mp3], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if os.path.exists(temp_m4a):
+                        os.remove(temp_m4a)
+                    return out_mp3
+    except Exception as itunes_err:
+        print(f"iTunes audio fallback failed: {itunes_err}")
 
     raise Exception("Audio axınını endirmək mümkün olmadı. Zəhmət olmasa bir az sonra yenidən cəhd edin.")
 
