@@ -279,28 +279,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initDB();
 
-  function saveTrackOffline(trackMeta, audioBlob) {
-    return new Promise((resolve, reject) => {
-      if (!db) return reject('DB not ready');
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
+  async function saveTrackOffline(trackMeta, audioBlob) {
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      return new Promise((resolve, reject) => {
+        if (!db) return reject('DB not ready');
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
 
-      const record = {
-        title: trackMeta.title,
-        artist: trackMeta.artist,
-        album: trackMeta.album || 'Single',
-        cover_url: trackMeta.cover_url,
-        audioBlob: audioBlob,
-        date: new Date().toLocaleDateString()
-      };
+        const record = {
+          title: trackMeta.title,
+          artist: trackMeta.artist,
+          album: trackMeta.album || 'Single',
+          cover_url: trackMeta.cover_url,
+          audioBuffer: arrayBuffer,
+          mimeType: audioBlob.type || 'audio/mpeg',
+          date: new Date().toLocaleDateString()
+        };
 
-      const req = store.add(record);
-      req.onsuccess = () => {
-        renderOfflineLibrary();
-        resolve(true);
-      };
-      req.onerror = (err) => reject(err);
-    });
+        const req = store.add(record);
+        req.onsuccess = () => {
+          renderOfflineLibrary();
+          resolve(true);
+        };
+        req.onerror = (err) => {
+          console.error('IndexedDB save error:', err);
+          reject(err);
+        };
+      });
+    } catch (err) {
+      console.error('ArrayBuffer conversion error:', err);
+    }
   }
 
   function getOfflineTracks() {
@@ -389,7 +398,8 @@ document.addEventListener('DOMContentLoaded', () => {
       URL.revokeObjectURL(currentPlayingUrl);
     }
 
-    currentPlayingUrl = URL.createObjectURL(track.audioBlob);
+    const blob = track.audioBlob || new Blob([track.audioBuffer], { type: track.mimeType || 'audio/mpeg' });
+    currentPlayingUrl = URL.createObjectURL(blob);
     audioElement.src = currentPlayingUrl;
     playerCover.src = track.cover_url || 'https://images.unsplash.com/photo-1614680376593-902f749f704b?w=600&auto=format&fit=crop&q=80';
     playerTitle.textContent = track.title;
