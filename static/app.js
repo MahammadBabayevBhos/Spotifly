@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=1.0.8').catch(err => console.log('SW registration failed', err));
+    navigator.serviceWorker.register('/static/sw.js?v=1.0.9').catch(err => console.log('SW registration failed', err));
   }
 
   // Fetch initial quota
@@ -483,7 +483,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  lyricsToggleBtn.addEventListener('click', handleLyricsClick);
+  // The handler above is the single lyrics click handler. Registering both
+  // handlers makes the second one immediately hide the lyrics panel again.
 
   // Updated Download Handler (Saves to IndexedDB for offline play + triggers MP3 download)
   const handleDownloadClick = async (e) => {
@@ -543,7 +544,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const blob = await res.blob();
 
       // Save to App's internal IndexedDB for Offline playback inside Web App!
-      await saveTrackOffline(trackToDownload, blob);
 
       // Trigger standard MP3 download for Files/Downloads
       const disposition = res.headers.get('Content-Disposition');
@@ -562,6 +562,13 @@ document.addEventListener('DOMContentLoaded', () => {
       a.download = filename;
       document.body.appendChild(a);
       a.click();
+
+      // Offline storage is optional and must never block the real MP3 download.
+      try {
+        await saveTrackOffline(trackToDownload, blob);
+      } catch (storageError) {
+        console.warn('Offline storage skipped:', storageError);
+      }
 
       setTimeout(() => {
         window.URL.revokeObjectURL(url);

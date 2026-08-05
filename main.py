@@ -247,23 +247,43 @@ def get_suggestions(q: str):
 def get_lyrics(title: str, artist: str):
     """Fetches song lyrics from free open LrcLib API."""
     try:
-        url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(artist)}&track_name={urllib.parse.quote(title)}"
-        res = requests.get(url, timeout=4)
+        headers = {"User-Agent": "Spotifly/1.0 lyrics client"}
+        res = requests.get(
+            "https://lrclib.net/api/get",
+            params={"artist_name": artist.strip(), "track_name": title.strip()},
+            headers=headers,
+            timeout=8,
+        )
         if res.status_code == 200:
             data = res.json()
             plain_lyrics = data.get("plainLyrics") or data.get("syncedLyrics")
             if plain_lyrics:
                 return {"success": True, "lyrics": plain_lyrics}
+
+        # Exact lookup can miss remixes, featured artists, or punctuation
+        # differences. Search provides a more tolerant fallback.
+        search_params = {"track_name": title.strip()}
+        if artist.strip() and artist.strip().lower() != "unknown artist":
+            search_params["artist_name"] = artist.strip()
+        search_res = requests.get(
+            "https://lrclib.net/api/search",
+            params=search_params,
+            headers=headers,
+            timeout=8,
+        )
+        if search_res.status_code == 200:
+            for item in search_res.json() or []:
+                lyrics = item.get("plainLyrics") or item.get("syncedLyrics")
+                if lyrics:
+                    return {"success": True, "lyrics": lyrics}
     except Exception as e:
         print(f"Lyrics fetch error: {e}")
     
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads audio using YouTube android_vr/web_creator clients with Apple iTunes direct audio fallback."""
+    """Download and convert a full audio track using yt-dlp and FFmpeg."""
     import glob
-    import subprocess
-    import requests
     
     # Strategy 1: YouTube Search with android_vr & web_creator clients
     try:
@@ -280,9 +300,15 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
                     'player_client': ['android_vr', 'web_creator', 'mweb'],
                 }
             },
+            # Current yt-dlp YouTube extraction requires EJS and a JS runtime.
+            'js_runtimes': {'node': {'path': None}},
+            'remote_components': ['ejs:github'],
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
+            'retries': 3,
+            'fragment_retries': 3,
+            'socket_timeout': 20,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"ytsearch1:{search_term}"])
@@ -295,28 +321,6 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             return matches[0]
     except Exception as yt_err:
         print(f"YouTube search attempt failed: {yt_err}")
-
-    # Strategy 2: Apple iTunes Direct High-Quality Audio Stream Fallback
-    try:
-        encoded_term = requests.utils.quote(search_term)
-        r = requests.get(f"https://itunes.apple.com/search?term={encoded_term}&entity=song&limit=1", timeout=6)
-        if r.status_code == 200:
-            data = r.json()
-            if data and data.get('results') and len(data['results']) > 0:
-                preview_url = data['results'][0].get('previewUrl')
-                if preview_url:
-                    aac_res = requests.get(preview_url, timeout=15)
-                    temp_m4a = output_path + ".m4a"
-                    out_mp3 = output_path + ".mp3"
-                    with open(temp_m4a, "wb") as f:
-                        f.write(aac_res.content)
-                    
-                    subprocess.run(["ffmpeg", "-y", "-i", temp_m4a, "-b:a", "320k", out_mp3], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if os.path.exists(temp_m4a):
-                        os.remove(temp_m4a)
-                    return out_mp3
-    except Exception as itunes_err:
-        print(f"iTunes audio fallback failed: {itunes_err}")
 
     raise Exception("Audio axınını endirmək mümkün olmadı. Zəhmət olmasa bir az sonra yenidən cəhd edin.")
 
