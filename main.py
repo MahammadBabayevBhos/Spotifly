@@ -260,43 +260,17 @@ def get_lyrics(title: str, artist: str):
     return {"success": False, "lyrics": "Mahnı sözləri tapılmadı."}
 
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
-    """Downloads audio using SoundCloud / YouTube search with zero bot challenge issues on cloud servers."""
+    """Downloads audio using YouTube / SoundCloud search with zero bot challenge issues on cloud servers."""
     import glob
     
-    # Attempt 1: SoundCloud Search (Fast, 100% open, zero datacenter IP bot challenges)
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path + '.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
-            }],
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"scsearch1:{search_term}"])
-        
-        matches = glob.glob(f"{output_path}*")
-        for m in matches:
-            if m.endswith('.mp3'):
-                return m
-        if matches:
-            return matches[0]
-    except Exception as sc_err:
-        print(f"SoundCloud search attempt: {sc_err}")
-
-    # Attempt 2: YouTube Search with android_vr / web_creator clients
-    clients_list = [
-        ['android_vr', 'web_creator', 'ios'],
-        ['android', 'mweb']
+    search_queries = [
+        f"ytsearch1:{search_term}",
+        f"ytsearch1:{search_term} audio",
+        f"scsearch1:{search_term}"
     ]
     
     last_error = None
-    for player_clients in clients_list:
+    for query in search_queries:
         try:
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -306,19 +280,15 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
                     'preferredcodec': 'mp3',
                     'preferredquality': '320',
                 }],
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': player_clients,
-                        'skip': ['webpage']
-                    }
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 },
                 'quiet': True,
                 'no_warnings': True,
                 'nocheckcertificate': True,
             }
-            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([f"ytsearch1:{search_term} audio"])
+                ydl.download([query])
             
             matches = glob.glob(f"{output_path}*")
             for m in matches:
@@ -327,7 +297,7 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             if matches:
                 return matches[0]
         except Exception as e:
-            print(f"yt-dlp attempt with {player_clients} failed: {e}")
+            print(f"yt-dlp attempt '{query}' failed: {e}")
             last_error = e
 
     if last_error:
