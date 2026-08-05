@@ -636,6 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderHistory() {
+    // The history card is optional in the compact production layout.
+    // Do not stop the rest of the app when that optional section is absent.
+    if (!historyCard || !historyList) return;
+
     if (downloadHistory.length === 0) {
       historyCard.style.display = 'none';
       return;
