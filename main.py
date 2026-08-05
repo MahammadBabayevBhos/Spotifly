@@ -1,4 +1,5 @@
 import os
+import base64
 import re
 import json
 import uuid
@@ -284,6 +285,18 @@ def get_lyrics(title: str, artist: str):
 def download_and_convert_mp3(search_term: str, output_path: str) -> str:
     """Download and convert a full audio track using yt-dlp and FFmpeg."""
     import glob
+
+    cookiefile = None
+    cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
+    if cookies_b64:
+        try:
+            cookie_data = base64.b64decode(cookies_b64).decode("utf-8")
+            if not cookie_data.lstrip().startswith(("# Netscape HTTP Cookie File", "# HTTP Cookie File")):
+                raise ValueError("cookies file is not in Netscape format")
+            cookiefile = os.path.join(tempfile.gettempdir(), "spotifly-youtube-cookies.txt")
+            Path(cookiefile).write_text(cookie_data, encoding="utf-8")
+        except Exception as cookie_err:
+            print(f"YouTube cookies could not be loaded: {cookie_err}")
     
     # Strategy 1: YouTube Search with android_vr & web_creator clients
     try:
@@ -311,6 +324,8 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             'fragment_retries': 3,
             'socket_timeout': 20,
         }
+        if cookiefile:
+            ydl_opts['cookiefile'] = cookiefile
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"ytsearch1:{search_term}"])
         
@@ -322,6 +337,12 @@ def download_and_convert_mp3(search_term: str, output_path: str) -> str:
             return matches[0]
     except Exception as yt_err:
         print(f"YouTube search attempt failed: {yt_err}")
+    finally:
+        if cookiefile:
+            try:
+                Path(cookiefile).unlink(missing_ok=True)
+            except OSError:
+                pass
 
     raise Exception("Audio axınını endirmək mümkün olmadı. Zəhmət olmasa bir az sonra yenidən cəhd edin.")
 
