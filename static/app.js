@@ -465,6 +465,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function updateFolderFocusMode() {
+    const isFolderView = activeFolderFilter !== 'all' && activeFolderFilter !== 'unfiled';
+    document.body.classList.toggle('folder-focus-mode', isFolderView);
+  }
+
   function deleteOfflineTrack(id) {
     return new Promise((resolve) => {
       if (!db) return resolve(false);
@@ -513,7 +518,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="offline-play-btn" data-id="${t.id}">
           <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
-        <button class="offline-del-btn" data-del-id="${t.id}">&times;</button>
+        ${t.folderId != null
+          ? `<button class="offline-del-btn" data-remove-folder-id="${t.id}" aria-label="Mahn\u0131n\u0131 qovluqdan \u00e7\u0131xar">&times;</button>`
+          : `<button class="offline-del-btn" data-del-id="${t.id}" aria-label="Mahn\u0131n\u0131 kitabxanadan sil">&times;</button>`}
       </div>
     `).join('');
 
@@ -576,7 +583,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="offline-play-btn" data-id="${t.id}">
           <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
-        <button class="offline-del-btn" data-del-id="${t.id}">&times;</button>
+        ${t.folderId != null
+          ? `<button class="offline-del-btn" data-remove-folder-id="${t.id}" aria-label="Mahn\u0131n\u0131 qovluqdan \u00e7\u0131xar">&times;</button>`
+          : `<button class="offline-del-btn" data-del-id="${t.id}" aria-label="Mahn\u0131n\u0131 kitabxanadan sil">&times;</button>`}
       </div>
     `).join('');
 
@@ -589,8 +598,13 @@ document.addEventListener('DOMContentLoaded', () => {
     offlineList.querySelectorAll('.offline-del-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        await deleteOfflineTrack(Number(btn.dataset.delId));
-        showToast('Mahn\u0131 oflayn kitabxanadan silindi', 'info');
+        if (btn.dataset.removeFolderId) {
+          await moveTrackToFolder(btn.dataset.removeFolderId, null);
+          showToast('Mahn\u0131 qovluqdan \u00e7\u0131xar\u0131ld\u0131, kitabxanada saxlan\u0131ld\u0131', 'success');
+        } else {
+          await deleteOfflineTrack(Number(btn.dataset.delId));
+          showToast('Mahn\u0131 oflayn kitabxanadan silindi', 'info');
+        }
       });
     });
     offlineList.querySelectorAll('[data-folder-select-id]').forEach(select => {
@@ -640,8 +654,12 @@ document.addEventListener('DOMContentLoaded', () => {
     folderList.querySelectorAll('[data-folder-filter]').forEach(row => {
       const selectFolder = async () => {
         activeFolderFilter = row.dataset.folderFilter;
+        updateFolderFocusMode();
         await renderFolderSidebar();
         await renderOfflineLibrary();
+        if (activeFolderFilter !== 'all' && activeFolderFilter !== 'unfiled') {
+          document.getElementById('offlineLibraryCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         if (window.innerWidth < 960) hideFolderSidebar();
       };
       row.addEventListener('click', selectFolder);
@@ -679,7 +697,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const folder = folders.find(item => String(item.id) === String(button.dataset.deleteFolder));
         if (!folder || !window.confirm(`“${folder.name}” qovlu\u011fu silinsin? Mahn\u0131lar qovluqsuz qalacaq.`)) return;
         await deleteFolder(folder.id);
-        if (String(activeFolderFilter) === String(folder.id)) activeFolderFilter = 'all';
+        if (String(activeFolderFilter) === String(folder.id)) {
+          activeFolderFilter = 'all';
+          updateFolderFocusMode();
+        }
         await renderFolderSidebar();
         await renderOfflineLibrary();
         showToast('Qovluq silindi', 'info');

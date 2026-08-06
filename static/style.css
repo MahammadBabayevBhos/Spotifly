@@ -1222,10 +1222,41 @@ header {
   color: var(--text-muted);
   background: rgba(0, 0, 0, 0.25);
   font-size: 0.68rem;
+  color-scheme: dark;
 }
 
 .folder-select:focus {
   border-color: rgba(29, 185, 84, 0.65);
+}
+
+.folder-select option {
+  color: #f8fafc;
+  background: #1b2027;
+}
+
+/* When a folder is open, keep the selected library crisp and softly blur the
+   search/header surfaces behind it, like an iPhone sheet focus state. */
+body.folder-focus-mode #mainContainer > header,
+body.folder-focus-mode #mainContainer > .pwa-banner,
+body.folder-focus-mode #mainContainer > .search-card {
+  filter: blur(7px);
+  opacity: 0.34;
+  pointer-events: none;
+  transform: scale(0.985);
+}
+
+body.folder-focus-mode #offlineLibraryCard {
+  position: relative;
+  z-index: 5;
+  border-color: rgba(29, 185, 84, 0.42);
+  box-shadow: 0 18px 60px rgba(29, 185, 84, 0.16), 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+#mainContainer > header,
+#mainContainer > .pwa-banner,
+#mainContainer > .search-card,
+#offlineLibraryCard {
+  transition: filter 0.38s ease, opacity 0.38s ease, transform 0.38s ease, box-shadow 0.38s ease;
 }
 
 .history-item[draggable="true"] {
