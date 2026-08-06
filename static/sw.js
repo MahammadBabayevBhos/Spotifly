@@ -1,9 +1,9 @@
-const CACHE_NAME = 'spotifly-v1.0.10';
+const CACHE_NAME = 'spotifly-v1.0.11';
 const ASSETS = [
   '/',
   '/static/index.html',
-  '/static/style.css?v=1.0.7',
-  '/static/app.js?v=1.0.10',
+  '/static/style.css?v=1.0.11',
+  '/static/app.js?v=1.0.11',
   '/static/manifest.json'
 ];
 

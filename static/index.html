@@ -10,11 +10,32 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Spotifly">
   <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/spotify--v1.png">
-  <link rel="stylesheet" href="/static/style.css?v=1.0.7">
+  <link rel="stylesheet" href="/static/style.css?v=1.0.11">
 </head>
 <body>
 
-  <div class="container">
+  <!-- iPhone-style folder library drawer -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="folder-sidebar" id="folderSidebar" aria-label="Musiqi qovluqları">
+    <div class="folder-sidebar-header">
+      <div>
+        <span class="eyebrow-label">KİTABXANA</span>
+        <h2>Qovluqlar</h2>
+      </div>
+      <button class="icon-button" id="closeFolderSidebar" aria-label="Qovluqları bağla">&times;</button>
+    </div>
+    <button class="new-folder-btn" id="newFolderBtn">
+      <span>＋</span> Yeni qovluq
+    </button>
+    <div class="folder-list" id="folderList"></div>
+    <div class="folder-drop-hint">Mahnını buradakı qovluğun üstünə sürüşdürüb burax.</div>
+  </aside>
+
+  <button class="folder-toggle-btn" id="folderToggleBtn" aria-label="Qovluqları aç">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2h7A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M3 9h18"/></svg>
+  </button>
+
+  <div class="container" id="mainContainer">
     <!-- Header -->
     <header>
       <div class="logo-group">
@@ -101,6 +122,10 @@
 
       <!-- Download Progress Overlay -->
       <div class="progress-container" id="progressContainer">
+        <div class="progress-header">
+          <span class="progress-label">Endirmə vəziyyəti</span>
+          <button class="progress-close-btn" id="closeProgressBtn" aria-label="Progress panelini bağla">&times;</button>
+        </div>
         <div class="progress-bar-bg">
           <div class="progress-bar-fill" id="progressBarFill"></div>
         </div>
@@ -122,6 +147,21 @@
       </div>
       <div class="history-list" id="offlineList">
         <div class="empty-offline-text" id="emptyOfflineText">Hələ oflayn mahnı yoxdur. Mahnı endirdikdə bura avtomatik yaddaşa yazılacaq!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Folder create / rename modal -->
+  <div class="folder-modal" id="folderModal" aria-hidden="true">
+    <div class="folder-modal-card" role="dialog" aria-modal="true" aria-labelledby="folderModalTitle">
+      <button class="icon-button folder-modal-close" id="cancelFolderBtn" aria-label="Pəncərəni bağla">&times;</button>
+      <div class="folder-modal-icon">📁</div>
+      <h3 id="folderModalTitle">Yeni qovluq</h3>
+      <p>Qovluğa yadda qalan bir ad ver.</p>
+      <input id="folderNameInput" class="folder-name-input" type="text" maxlength="40" placeholder="Məsələn: Sevdiklərim">
+      <div class="folder-modal-actions">
+        <button class="btn-secondary" id="cancelFolderAction">Ləğv et</button>
+        <button class="btn-primary" id="saveFolderBtn">Yadda saxla</button>
       </div>
     </div>
   </div>
@@ -151,6 +191,6 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=1.0.10"></script>
+  <script src="/static/app.js?v=1.0.11"></script>
 </body>
 </html>

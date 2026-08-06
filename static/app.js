@@ -24,6 +24,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressBarFill = document.getElementById('progressBarFill');
   const progressText = document.getElementById('progressText');
   const progressPercent = document.getElementById('progressPercent');
+  const closeProgressBtn = document.getElementById('closeProgressBtn');
+
+  const folderSidebar = document.getElementById('folderSidebar');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const folderToggleBtn = document.getElementById('folderToggleBtn');
+  const closeFolderSidebar = document.getElementById('closeFolderSidebar');
+  const folderList = document.getElementById('folderList');
+  const newFolderBtn = document.getElementById('newFolderBtn');
+  const folderModal = document.getElementById('folderModal');
+  const folderModalTitle = document.getElementById('folderModalTitle');
+  const folderNameInput = document.getElementById('folderNameInput');
+  const saveFolderBtn = document.getElementById('saveFolderBtn');
+  const cancelFolderBtn = document.getElementById('cancelFolderBtn');
+  const cancelFolderAction = document.getElementById('cancelFolderAction');
 
   const historyCard = document.getElementById('historyCard');
   const historyList = document.getElementById('historyList');
@@ -32,6 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentResolvedTrack = null;
   let downloadHistory = JSON.parse(localStorage.getItem('spotifly_history') || '[]');
   let suggestionDebounceTimer = null;
+  let activeFolderFilter = 'all';
+  let folderModalMode = 'create';
+  let editingFolderId = null;
 
   // Live Autocomplete Suggestions
   searchInput.addEventListener('input', () => {
@@ -104,12 +121,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=1.0.10').catch(err => console.log('SW registration failed', err));
+    navigator.serviceWorker.register('/static/sw.js?v=1.0.11').catch(err => console.log('SW registration failed', err));
   }
 
   // Fetch initial quota
   updateQuota();
   renderHistory();
+
+  function hideFolderSidebar() {
+    document.body.classList.remove('folder-drawer-open');
+  }
+
+  folderToggleBtn?.addEventListener('click', () => {
+    document.body.classList.add('folder-drawer-open');
+  });
+  closeFolderSidebar?.addEventListener('click', hideFolderSidebar);
+  sidebarBackdrop?.addEventListener('click', hideFolderSidebar);
+
+  // Bind the folder controls immediately so they remain usable even while
+  // the offline library is still opening IndexedDB in the background.
+  if (newFolderBtn) {
+    newFolderBtn.dataset.bound = 'true';
+    newFolderBtn.addEventListener('click', () => openFolderModal());
+  }
+  cancelFolderBtn?.addEventListener('click', closeFolderModal);
+  cancelFolderAction?.addEventListener('click', closeFolderModal);
+  folderModal?.addEventListener('click', (e) => {
+    if (e.target === folderModal) closeFolderModal();
+  });
+  folderNameInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveFolderBtn.click();
+    if (e.key === 'Escape') closeFolderModal();
+  });
+  saveFolderBtn?.addEventListener('click', saveFolderFromModal);
 
   // Search input events
   searchInput.addEventListener('input', () => {
@@ -219,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     trackAlbum.textContent = track.album || 'Single';
     trackCover.src = track.cover_url || 'https://images.unsplash.com/photo-1614680376593-902f749f704b?w=600&auto=format&fit=crop&q=80';
     
-    progressContainer.style.display = 'none';
+    hideProgress();
     lyricsContainer.style.display = 'none';
     lyricsText.textContent = 'Yüklənir...';
     downloadBtn.disabled = false;
@@ -229,6 +273,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Scroll to preview on mobile
     previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+
+  function hideProgress() {
+    progressContainer.style.display = 'none';
+    progressBarFill.style.width = '0%';
+    progressPercent.textContent = '0%';
+    if (closeProgressBtn) closeProgressBtn.style.display = 'none';
+  }
+
+  closeProgressBtn?.addEventListener('click', hideProgress);
 
   // Lyrics Toggle Handler
   lyricsToggleBtn.addEventListener('click', async () => {
@@ -260,20 +313,32 @@ document.addEventListener('DOMContentLoaded', () => {
   let db = null;
   const DB_NAME = 'SpotiflyOfflineDB';
   const STORE_NAME = 'tracks';
+  const FOLDERS_STORE = 'folders';
+  const DB_VERSION = 2;
 
   function initDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1);
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (e) => {
         const database = e.target.result;
+        let tracksStore;
         if (!database.objectStoreNames.contains(STORE_NAME)) {
-          database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+          tracksStore = database.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        } else {
+          tracksStore = e.target.transaction.objectStore(STORE_NAME);
+        }
+        if (!tracksStore.indexNames.contains('folderId')) {
+          tracksStore.createIndex('folderId', 'folderId', { unique: false });
+        }
+        if (!database.objectStoreNames.contains(FOLDERS_STORE)) {
+          database.createObjectStore(FOLDERS_STORE, { keyPath: 'id', autoIncrement: true });
         }
       };
       request.onsuccess = (e) => {
         db = e.target.result;
         resolve(db);
         renderOfflineLibrary();
+        renderFolderSidebar();
       };
       request.onerror = (e) => reject(e);
     });
@@ -296,7 +361,8 @@ document.addEventListener('DOMContentLoaded', () => {
           cover_url: trackMeta.cover_url,
           audioBuffer: arrayBuffer,
           mimeType: audioBlob.type || 'audio/mpeg',
-          date: new Date().toLocaleDateString()
+          date: new Date().toLocaleDateString(),
+          folderId: null
         };
 
         const req = store.add(record);
@@ -325,6 +391,80 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function getFolders() {
+    return new Promise((resolve) => {
+      if (!db) return resolve([]);
+      const tx = db.transaction(FOLDERS_STORE, 'readonly');
+      const req = tx.objectStore(FOLDERS_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  }
+
+  function createFolder(name) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error('Kitabxana hələ hazır deyil.'));
+      const tx = db.transaction(FOLDERS_STORE, 'readwrite');
+      const req = tx.objectStore(FOLDERS_STORE).add({ name, createdAt: Date.now() });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function updateFolder(id, name) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error('Kitabxana hələ hazır deyil.'));
+      const tx = db.transaction(FOLDERS_STORE, 'readwrite');
+      const store = tx.objectStore(FOLDERS_STORE);
+      const getReq = store.get(Number(id));
+      getReq.onsuccess = () => {
+        if (!getReq.result) return reject(new Error('Qovluq tapılmadı.'));
+        getReq.result.name = name;
+        const putReq = store.put(getReq.result);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
+  async function deleteFolder(id) {
+    if (!db) return false;
+    const tracks = await getOfflineTracks();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME, FOLDERS_STORE], 'readwrite');
+      const tracksStore = tx.objectStore(STORE_NAME);
+      tracks.filter(track => String(track.folderId) === String(id)).forEach(track => {
+        track.folderId = null;
+        tracksStore.put(track);
+      });
+      tx.objectStore(FOLDERS_STORE).delete(Number(id));
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  function moveTrackToFolder(trackId, folderId) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error('Kitabxana hələ hazır deyil.'));
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(Number(trackId));
+      req.onsuccess = () => {
+        if (!req.result) return reject(new Error('Mahnı tapılmadı.'));
+        req.result.folderId = folderId === null || folderId === '' ? null : Number(folderId);
+        const putReq = store.put(req.result);
+        putReq.onsuccess = () => {
+          renderOfflineLibrary();
+          renderFolderSidebar();
+          resolve(true);
+        };
+        putReq.onerror = () => reject(putReq.error);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   function deleteOfflineTrack(id) {
     return new Promise((resolve) => {
       if (!db) return resolve(false);
@@ -333,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const req = store.delete(id);
       req.onsuccess = () => {
         renderOfflineLibrary();
+        renderFolderSidebar();
         resolve(true);
       };
     });
@@ -393,6 +534,195 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Mahnı oflayn kitabxanadan silindi', 'info');
       });
     });
+  }
+
+  // Folder-aware library renderer. This replaces the compact renderer above
+  // while keeping old IndexedDB records compatible with the new folderId field.
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  async function renderOfflineLibrary() {
+    const allTracks = await getOfflineTracks();
+    const tracks = activeFolderFilter === 'all'
+      ? allTracks
+      : allTracks.filter(track => activeFolderFilter === 'unfiled'
+        ? track.folderId == null
+        : String(track.folderId) === String(activeFolderFilter));
+    const folders = await getFolders();
+    offlineCountBadge.textContent = `${allTracks.length} Mahn\u0131`;
+
+    if (tracks.length === 0) {
+      const message = activeFolderFilter === 'all'
+        ? 'H\u0259l\u0259 oflayn mahn\u0131 yoxdur. Mahn\u0131 endirdikd\u0259 bura avtomatik yadda\u015fa yaz\u0131lacaq!'
+        : 'Bu qovluqda h\u0259l\u0259 mahn\u0131 yoxdur.';
+      offlineList.innerHTML = `<div class="empty-offline-text">${message}</div>`;
+      return;
+    }
+
+    offlineList.innerHTML = tracks.map(t => `
+      <div class="history-item" draggable="true" data-track-id="${t.id}">
+        <img src="${t.cover_url || 'https://images.unsplash.com/photo-1614680376593-902f749f704b?w=600&auto=format&fit=crop&q=80'}" class="history-img" alt="Cover">
+        <div class="history-info">
+          <div class="history-title">${escapeHtml(t.title)}</div>
+          <div class="history-artist">${escapeHtml(t.artist)} &bull; Oflayn</div>
+        </div>
+        <select class="folder-select" data-folder-select-id="${t.id}" aria-label="Qovluq sec">
+          <option value="">Qovluqsuz</option>
+          ${folders.map(folder => `<option value="${folder.id}" ${String(t.folderId) === String(folder.id) ? 'selected' : ''}>📁 ${escapeHtml(folder.name)}</option>`).join('')}
+        </select>
+        <button class="offline-play-btn" data-id="${t.id}">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button class="offline-del-btn" data-del-id="${t.id}">&times;</button>
+      </div>
+    `).join('');
+
+    offlineList.querySelectorAll('.offline-play-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const track = tracks.find(item => item.id === Number(btn.dataset.id));
+        if (track) playOfflineAudio(track);
+      });
+    });
+    offlineList.querySelectorAll('.offline-del-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await deleteOfflineTrack(Number(btn.dataset.delId));
+        showToast('Mahn\u0131 oflayn kitabxanadan silindi', 'info');
+      });
+    });
+    offlineList.querySelectorAll('[data-folder-select-id]').forEach(select => {
+      select.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        await moveTrackToFolder(select.dataset.folderSelectId, select.value || null);
+        showToast(select.value ? 'Mahn\u0131 qovlu\u011fa \u0259lav\u0259 olundu' : 'Mahn\u0131 qovluqdan \u00e7\u0131xar\u0131ld\u0131', 'success');
+      });
+    });
+    offlineList.querySelectorAll('.history-item[draggable="true"]').forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/track-id', item.dataset.trackId);
+      });
+      item.addEventListener('dragend', () => item.classList.remove('dragging'));
+    });
+  }
+
+  async function renderFolderSidebar() {
+    if (!folderList) return;
+    const [folders, tracks] = await Promise.all([getFolders(), getOfflineTracks()]);
+    const countFor = (filter) => filter === 'all'
+      ? tracks.length
+      : tracks.filter(track => filter === 'unfiled' ? track.folderId == null : String(track.folderId) === String(filter)).length;
+    const virtualFolders = [
+      { filter: 'all', icon: '\u266a', name: 'B\u00fct\u00fcn mahn\u0131lar' },
+      { filter: 'unfiled', icon: '\u2606', name: 'Qovluqsuz' }
+    ];
+
+    folderList.innerHTML = virtualFolders.map(folder => `
+      <div class="folder-row ${activeFolderFilter === folder.filter ? 'active' : ''}" data-folder-filter="${folder.filter}" tabindex="0">
+        <span class="folder-row-icon">${folder.icon}</span>
+        <span class="folder-row-name">${folder.name}</span>
+        <span class="folder-row-count">${countFor(folder.filter)}</span>
+      </div>
+    `).join('') + folders.map(folder => `
+      <div class="folder-row ${String(activeFolderFilter) === String(folder.id) ? 'active' : ''}" data-folder-filter="${folder.id}" data-folder-id="${folder.id}" tabindex="0">
+        <span class="folder-row-icon">📁</span>
+        <span class="folder-row-name">${escapeHtml(folder.name)}</span>
+        <span class="folder-row-count">${countFor(folder.id)}</span>
+        <button class="folder-row-action" data-rename-folder="${folder.id}" aria-label="Qovlu\u011fun ad\u0131n\u0131 d\u0259yi\u015f">✎</button>
+        <button class="folder-row-action danger" data-delete-folder="${folder.id}" aria-label="Qovlu\u011fu sil">×</button>
+      </div>
+    `).join('');
+
+    folderList.querySelectorAll('[data-folder-filter]').forEach(row => {
+      const selectFolder = async () => {
+        activeFolderFilter = row.dataset.folderFilter;
+        await renderFolderSidebar();
+        await renderOfflineLibrary();
+        if (window.innerWidth < 960) hideFolderSidebar();
+      };
+      row.addEventListener('click', selectFolder);
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectFolder();
+        }
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        const trackId = e.dataTransfer.getData('text/track-id');
+        if (!trackId || row.dataset.folderFilter === 'all') return;
+        await moveTrackToFolder(trackId, row.dataset.folderFilter === 'unfiled' ? null : row.dataset.folderFilter);
+        showToast('Mahn\u0131 qovlu\u011fa k\u00f6\u00e7\u00fcr\u00fcld\u00fc', 'success');
+      });
+    });
+    folderList.querySelectorAll('[data-rename-folder]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const folder = folders.find(item => String(item.id) === String(button.dataset.renameFolder));
+        if (folder) openFolderModal('rename', folder);
+      });
+    });
+    folderList.querySelectorAll('[data-delete-folder]').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const folder = folders.find(item => String(item.id) === String(button.dataset.deleteFolder));
+        if (!folder || !window.confirm(`“${folder.name}” qovlu\u011fu silinsin? Mahn\u0131lar qovluqsuz qalacaq.`)) return;
+        await deleteFolder(folder.id);
+        if (String(activeFolderFilter) === String(folder.id)) activeFolderFilter = 'all';
+        await renderFolderSidebar();
+        await renderOfflineLibrary();
+        showToast('Qovluq silindi', 'info');
+      });
+    });
+  }
+
+  function openFolderModal(mode = 'create', folder = null) {
+    folderModalMode = mode;
+    editingFolderId = folder?.id || null;
+    folderModalTitle.textContent = mode === 'rename' ? 'Qovlu\u011fun ad\u0131n\u0131 d\u0259yi\u015f' : 'Yeni qovluq';
+    folderNameInput.value = folder?.name || '';
+    folderModal.classList.add('open');
+    folderModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => folderNameInput.focus(), 30);
+  }
+
+  function closeFolderModal() {
+    folderModal.classList.remove('open');
+    folderModal.setAttribute('aria-hidden', 'true');
+    folderNameInput.value = '';
+  }
+
+  async function saveFolderFromModal() {
+    const name = folderNameInput.value.trim();
+    if (!name) {
+      folderNameInput.focus();
+      return;
+    }
+    try {
+      if (folderModalMode === 'rename') {
+        await updateFolder(editingFolderId, name);
+        showToast('Qovlu\u011fun ad\u0131 d\u0259yi\u015fdirildi', 'success');
+      } else {
+        await createFolder(name);
+        showToast('Yeni qovluq yarad\u0131ld\u0131', 'success');
+      }
+      closeFolderModal();
+      await renderFolderSidebar();
+      await renderOfflineLibrary();
+    } catch (err) {
+      showToast(err.message || 'Qovluq yadda saxlanmad\u0131', 'error');
+    }
   }
 
   function playOfflineAudio(track) {
@@ -513,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadBtn.disabled = true;
     progressContainer.style.display = 'block';
+    if (closeProgressBtn) closeProgressBtn.style.display = 'none';
     
     let progress = 10;
     updateProgress(progress, 'Spotify & Audio axını axtarılır...');
@@ -543,6 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       updateProgress(100, 'Tətbiq daxilinə yaddaşa yazılır...');
 
+      if (closeProgressBtn) closeProgressBtn.style.display = 'inline-flex';
       const blob = await res.blob();
 
       // Save to App's internal IndexedDB for Offline playback inside Web App!
@@ -603,7 +935,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       clearInterval(interval);
       showToast(err.message, 'error');
-      progressContainer.style.display = 'none';
+      hideProgress();
     } finally {
       downloadBtn.disabled = false;
     }
